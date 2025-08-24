@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Webcam & Image Detection with ml5.js</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ml5@0.12.2/dist/ml5.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      height: 100vh;
+      background: #1c1c1c;
+      color: #fff;
+      font-family: sans-serif;
+    }
+    canvas {
+      margin-top: 10px;
+      border: 3px solid lime;
+      border-radius: 8px;
+    }
+    #controls {
+      margin: 10px;
+    }
+    button, input[type="file"] {
+      margin: 5px;
+      padding: 8px 12px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Object Detection</h1>
+  <div id="controls">
+    <button onclick="startWebcam()">📷 Use Webcam</button>
+    <input type="file" id="imageUpload" accept="image/*" onchange="handleImageUpload(event)">
+  </div>
+  <p id="status">Loading model...</p>
+
+  <script>
+    let detector;
+    let video;
+    let detections = [];
+    let usingWebcam = false;
+    let uploadedImage;
+    let canvas;
+
+    function setup() {
+      canvas = createCanvas(640, 480);
+      canvas.parent(document.body);
+      detector = ml5.objectDetector('cocossd', modelReady);
+    }
+
+    function modelReady() {
+      select('#status').html('Model loaded. Choose webcam or upload image.');
+    }
+
+    function startWebcam() {
+      if (uploadedImage) {
+        uploadedImage.remove();
+        uploadedImage = null;
+      }
+
+      usingWebcam = true;
+      detections = [];
+
+      if (!video) {
+        video = createCapture(VIDEO);
+        video.size(640, 480);
+        video.hide();
+      }
+
+      detectWebcam();
+    }
+
+    function detectWebcam() {
+      if (usingWebcam) {
+        detector.detect(video, (err, results) => {
+          if (err) {
+            console.error(err);
+            return;
+          }
+          detections = results;
+          detectWebcam(); // Keep detecting
+        });
+      }
+    }
+
+    function handleImageUpload(event) {
+      usingWebcam = false;
+      detections = [];
+
+      if (video) {
+        video.remove();
+        video = null;
+      }
+
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const imgURL = URL.createObjectURL(file);
+      loadImage(imgURL, (img) => {
+        uploadedImage = img;
+        detector.detect(uploadedImage.canvas, (err, results) => {
+          if (err) {
+            console.error(err);
+            return;
+          }
+          detections = results;
+          redraw(); // Trigger draw manually
+        });
+      });
+    }
+
+    function draw() {
+      clear();
+
+      if (usingWebcam && video) {
+        image(video, 0, 0);
+      } else if (uploadedImage) {
+        image(uploadedImage, 0, 0, width, height);
+      }
+
+      for (const obj of detections) {
+        noFill();
+        stroke('lime');
+        strokeWeight(2);
+        rect(obj.x, obj.y, obj.width, obj.height);
+
+        noStroke();
+        fill('lime');
+        textSize(16);
+        text(`${obj.label} ${(obj.confidence * 100).toFixed(1)}%`, obj.x + 5, obj.y + 20);
+      }
+    }
+
+    // Disable looping unless webcam is active
+    function drawLoopControl() {
+      if (usingWebcam) {
+        loop();
+      } else {
+        noLoop(); // Only draw once for image
+      }
+    }
+
+    setInterval(drawLoopControl, 500); // Monitor loop state
+  </script>
+</body>
+</html>
